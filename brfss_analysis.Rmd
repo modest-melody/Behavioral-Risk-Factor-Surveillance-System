@@ -1,0 +1,1254 @@
+---
+title: "Behavioral Risk Factor Surveillance System Analysis"
+toc-title: "BRFSS Analysis"
+author: "Michael McGee"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: show
+    theme: 
+      bootswatch: superhero
+      bg: "#011927"
+      fg: "#FFFFFF"
+      primary: "#4E8BA6"
+      secondary: "#293848"
+      base_font:
+        google: Raleway
+      heading_font:
+        google: Bebas Neue
+      code_font:
+        google: Cutive Mono
+---
+
+```{css echo=FALSE}
+
+.main-container {
+  max-width: 80% !important;
+}
+
+center > p{
+    margin-bottom: 0;
+}
+
+blockquote {
+    margin: 0 0 1rem;
+    padding: 0.625rem 1.25rem;
+    background-color: #344752;
+    border-left: .5rem solid #4E8BA6;
+    border-right: .5rem solid #4E8BA6;
+    border-top: .5rem solid #4E8BA6;
+    border-bottom: .5rem solid #4E8BA6;
+    outline: 1px solid #FFFFFF;
+}
+
+
+body {
+    background-image: url("https://i.ibb.co/rkzjrR0/leftbackground2.png");
+    background-color: #011927;
+    height: 100%;
+    background-repeat: no-repeat;
+    background-attachment: fixed;
+    background-size: contain;
+}
+
+
+div#header {
+  background: url("https://i.ibb.co/ZcbvB34/he.jpg");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+  width: 100%!important;
+  border: 4px solid white;
+  text-align: center;
+  margin: 50px 0px 20px 0px;
+}
+
+center {
+    padding: 20px 0px 20px 0px;
+    bottom: 30px;
+}
+
+center > p {
+    margin-bottom: -0.03rem;
+}
+
+
+
+div#btn-btn-default.btn-xs.btn-secondary.btn-sm.code-folding-btn.pull-right.float-right {
+    position: absolute;
+    top: 100px;
+}
+
+div.col-xs-12.col-sm-4.col-md-3 {
+    margin: 50px 0px 0px 0px;
+    padding: 65px 0px 0px 0px;
+}
+
+div.col-md-3 {
+    width: 20%;
+}
+
+code {
+    color: #F1A308;
+    background-color: #2C3347;
+    border-radius: 0;
+    padding: .125rem .25rem;
+    word-wrap: break-word;
+}
+
+
+
+div.btn-group.pull-right.float-right {
+margin-bottom: 500px;
+}
+
+
+
+pre.r {
+    color: #A7F2FC;
+    background-color: #021927!important;
+    border-radius: 12;
+}
+
+
+pre {
+    color: #FFFFFF;
+    background-color: #1C3345!important;
+}
+
+span.hljs-keyword {
+    color: #FFFFFF;
+    font-weight: normal;
+}
+
+
+span.hljs-string {
+    color: #BBD6DE;
+}
+
+
+span.hljs-literal {
+    color: #DE00A7;
+}
+
+
+span.hljs-number {
+    color: #9FDED5;
+}
+
+h2#toc-title {
+    margin: 75px 0px 0px 0px;
+    position: fixed;
+    top: 0;
+    color: #FFFFFF;
+}
+
+```
+
+## Setup
+
+```{r load-packages, warning = FALSE, message = FALSE}
+library(tidyverse)
+library(readxl)
+library(ggmosaic) # For mosaic plotting
+library(usmap) # For US Map plotting
+library(usmapdata) # For centroid locations of US map to map geom_text
+library(tidycensus) # For population and FIPS data
+library(thematic) # Adapt plots to RMD theme
+thematic_rmd()
+
+library(showtext) # To customize fonts in ggplot
+showtext_auto(enable = TRUE)
+font_add_google("Raleway", family = "raleway")
+font_add_google("Bebas Neue", family = "bebas neue")
+```
+
+
+************************
+
+## Scope of Data
+
+<center>
+<img src="https://ldh.la.gov/assets/oph/Center-PHI/BRFSS/BRFSS.png">
+</center>
+
+The Behavioral Risk Factor Surveillance System (BRFSS) is a data set from an observational study conducted in 2013 by the CDC in all 50 US states and the District of Columbia, Puerto Rico, and Guam. The purpose of this study was to retrieve state-specific data on preventative health practices and risk behaviors from approximately 490,000 randomly selected individuals that reside in private residences or college housing. The survey was conducted with stratified random sampling from all participating districts. 
+
+This survey data allows the ability to ask research questions that we can generalize to the US population. However we can not make any causal statements or inferences based upon this data because it was strictly an observational study and no random assignment was conducted. 
+
+Potential non-response bias may be considered for this data since the surveys were conducted using land lines and cell phones. We also know that there is a population of those who do not have neither land lines or cell phones and that those individuals may be at the lower end of the income range.  
+
+Since the dataset contains 491,775 rows and 2,365 columns - the data frame for this analysis will only be loaded with columns pertaining to housing, location and vehicular behavior data.
+
+The full codebook PDF for the 2013 BRFSS dataset can be found [**here.**](https://www.cdc.gov/brfss/annual_data/2013/pdf/CODEBOOK13_LLCP.pdf)
+
+
+**********************
+
+
+## Research Questions
+
+**Research Question 1:**
+What are the probabilities of owning or renting a home given an individual's income level and education level?
+
+**Research Question 2:**
+How do property values influence home ownership or renter status among each US State?
+
+**Research Question 3:**
+What is the correlation between individuals who claim to "always" wear seat belts and their states' vehicle fatality rates?
+
+*************************
+
+
+## Research Question 1
+
+**What are the probabilities of owning or renting a home given an individual's income level and education level?**
+
+### EDA
+
+```{r load-brfss2013-data, warning = FALSE, message = FALSE, results = 'hide'}
+brfss2013 <- read_csv("Data/brfss13.csv")
+```
+
+
+************************
+
+
+#### 3 Variables
+
+**`renthom1`: Home owners, renters, and "other arrangement"**
+
+  * `n` = Number of respondents
+  
+  * `pc` = Percentage of total survey
+  
+```{r renthom1}
+brfss2013 %>% count(renthom1) %>% summarize(renthom1, n, pc = n/sum(n)) %>% arrange(desc(pc))
+```
+
+
+**`X_educag`: Education Levels (4 levels)**
+
+  * `n` = Number of respondents
+  
+  * `pc` = Percentage of total survey
+  
+```{r X_educag}
+brfss2013 %>% count(X_educag) %>% summarize(X_educag, n, pc = n/sum(n))
+```
+
+
+**`income2`: Income Levels (8 classes)**
+
+  * `n` = Number of respondents
+  
+  * `pc` = Percentage of total survey
+
+```{r income2}
+brfss2013 %>% count(income2) %>% summarize(income2, n, pc = n/sum(n)) 
+```
+
+
+*************************
+
+
+#### Data Wrangling
+
+Create a new data frame and rename with the 3 variables selected for this analysis and remove any NA's.
+```{r}
+ds <- brfss2013 %>% select(income2, X_educag, renthom1) %>% 
+  rename(income_lev = income2, edu_lev = X_educag) %>% 
+  drop_na()
+
+ds %>% head()
+```
+
+
+Relabel income values with numeric labels.
+```{r}
+ds <- ds %>% mutate(income_lev = as.factor(case_when(
+  income_lev == "Less than $10,000" ~ "$0 - $10,000",
+  income_lev == "Less than $15,000" ~ "$10,000 - $15,000",
+  income_lev == "Less than $20,000" ~ "$15,000 - $20,000",
+  income_lev == "Less than $25,000" ~ "$20,000 - $25,000",
+  income_lev == "Less than $35,000" ~ "$25,000 - $35,000",
+  income_lev == "Less than $50,000" ~ "$35,000 - $50,000",
+  income_lev == "Less than $75,000" ~ "$50,000 - $75,000",
+  income_lev == "$75,000 or more"   ~ "$75,000 +"    ) ) )
+```
+
+
+Verify factor levels
+```{r}
+ds$edu_lev <- factor(ds$edu_lev, levels = c("Did not graduate high school", "Graduated high school",
+                                            "Attended college or technical school", "Graduated from college or technical school"))
+```
+
+```{r}
+levels(ds$edu_lev)
+levels(ds$income_lev)
+```
+
+
+***********************
+
+
+#### Frequency Histograms for the 3 Variables
+
+```{r}
+ds %>% ggplot(aes(x = renthom1)) + 
+  geom_bar() 
+```
+
+> `renthom1` - Home Residence Status shows that home owners comprised more than double the amount of "rent" and "other arrangement" responses.
+
+
+***********************
+
+
+```{r}
+ds %>% ggplot(aes(x = income_lev)) + 
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+> `income_lev` - Income levels of respondents is highly left skewed. Respondents over the $75,000 threshold almost doubles those in the $50,000-$75,000 range and decreases continuously down the income ranges.
+
+
+***********************
+
+
+```{r}
+ds %>% ggplot(aes(x = edu_lev)) + 
+  geom_bar() +                                # Modify labels of ggplot2 barplot
+  scale_x_discrete(labels = function(x) str_wrap(levels(ds$edu_lev), width = 10))
+```
+
+> `edu_lev` - Education levels above "Did not graduate high school" make up 92% of respondents with "College graduates" taking about 20% more than the two median education levels.
+
+
+
+
+******************************
+
+
+### Mapping for Mosaic Plots
+
+Mosaic plots will show how education and income levels vary for each of the 3 residence types (own, rent, & other).
+
+Each plot will display a weighted percentile label inside each box of the mosaic plot. The first step is to build a data frame using `ggplot_build()` to locate all of the box coordinates to tell ggplot where to map the percentiles on the plot. Since we have 4 education levels and 8 income levels, we will obtain 32 boxes for each of the 3 mosaic plots. 
+
+```{r geom_label-mapping, message=FALSE, warning=FALSE}
+# Calculate percentiles and X/Y locations by (own/rent/other)
+gg_own <- ggplot_build(ds %>% filter(renthom1 == "Own") %>% ggplot() +
+  geom_mosaic(aes(x=product(edu_lev, income_lev), fill = edu_lev)))$data[[1]] %>% 
+  summarize(pc = .wt/sum(.wt), label, xmin, xmax, ymin, ymax, .wt) %>% ungroup()
+
+gg_rent <- ggplot_build(ds %>% filter(renthom1 == "Rent") %>% ggplot() +
+  geom_mosaic(aes(x=product(edu_lev, income_lev), fill = edu_lev)))$data[[1]] %>% 
+  summarize(pc = .wt/sum(.wt), label, xmin, xmax, ymin, ymax, .wt) %>% ungroup()
+
+gg_other <- ggplot_build(ds %>% filter(renthom1 == "Other arrangement") %>% ggplot() +
+  geom_mosaic(aes(x=product(edu_lev, income_lev), fill = edu_lev)))$data[[1]] %>% 
+  summarize(pc = .wt/sum(.wt), label, xmin, xmax, ymin, ymax, .wt) %>% ungroup()
+```
+
+We now have the percentiles of each combination of income and education (8x4=32) for each residence type in the `pc` column, and the mapping in the `xmin`, `xmax`, `ymin`, `ymax` columns.
+
+
+Next, aggregate these individual percentiles into their marginal probabilities for income and education levels.
+
+
+This function creates a data frame that calculates the marginal probabilities, and maps them to the centroid of `x` and `y` for `geom_label` `aes`.
+
+```{r}
+geom_text_margin <- function(Own_Rent_Other_arrangement){ # Enter "Own", "Rent", or "Other arrangement"
+
+r <- ggplot_build(ds %>% filter(renthom1 == Own_Rent_Other_arrangement) %>% 
+               ggplot() + # Create gg_build object to give coordinates
+               geom_mosaic(aes(x=product(edu_lev, income_lev), fill = edu_lev)) +
+               ggtitle(Own_Rent_Other_arrangement) + 
+               ylab("Education Level") +
+               xlab("Income Level") +
+               theme(axis.text.x = element_text(angle = 75, vjust = 0.5, hjust=0.5, size = 10, face = "bold"),
+                     axis.text.y = element_blank(),
+                     legend.position = "left",
+                     legend.key.height = unit(100, "points"),
+                     legend.title = element_blank(),
+                     plot.title.position = "plot",
+                     plot.title = element_text(hjust = 0.5, size = 28, face = "bold"),
+                     axis.title = element_text(face = "bold", size = 15)) +
+               guides(fill = guide_legend(reverse=TRUE))) %>% .[[1]] %>% .[[1]] %>% # Pull out the data frame
+  mutate(x = case_when( # Add x and y columns by averaging min and max coordiantes to get center
+      x__income_lev == "$0 - $10,000"      & x__fill__edu_lev == "Did not graduate high school" ~ (xmin+xmax)/2,
+      x__income_lev == "$10,000 - $15,000" & x__fill__edu_lev == "Did not graduate high school" ~ (xmin+xmax)/2,
+      x__income_lev == "$15,000 - $20,000" & x__fill__edu_lev == "Did not graduate high school" ~ (xmin+xmax)/2,
+      x__income_lev == "$20,000 - $25,000" & x__fill__edu_lev == "Did not graduate high school" ~ (xmin+xmax)/2,
+      x__income_lev == "$25,000 - $35,000" & x__fill__edu_lev == "Did not graduate high school" ~ (xmin+xmax)/2,
+      x__income_lev == "$35,000 - $50,000" & x__fill__edu_lev == "Did not graduate high school" ~ (xmin+xmax)/2,
+      x__income_lev == "$50,000 - $75,000" & x__fill__edu_lev == "Did not graduate high school" ~ (xmin+xmax)/2,
+      x__income_lev == "$75,000 +"         & x__fill__edu_lev == "Did not graduate high school" ~ (xmin+xmax)/2),
+         y = case_when(
+      x__fill__edu_lev == "Did not graduate high school" & x__income_lev == "$75,000 +" ~ (ymin+ymax)/2,
+      x__fill__edu_lev == "Attended college or technical school" & x__income_lev == "$75,000 +" ~ (ymin+ymax)/2,
+      x__fill__edu_lev == "Did not graduate high school" & x__income_lev == "$75,000 +" ~ (ymin+ymax)/2,
+      x__fill__edu_lev == "Graduated from college or technical school" & x__income_lev == "$75,000 +" ~ (ymin+ymax)/2,
+      x__fill__edu_lev == "Graduated high school" & x__income_lev == "$75,000 +" ~ (ymin+ymax)/2)
+               ) %>% 
+  mutate(x = if_else(is.na(x),1,x), # Force income_lev marginals against the x axis 
+         y = if_else(is.na(y),1,y)  # Force edu_level marginals against the y axis 
+  ) %>% 
+  mutate(pc = .wt/sum(.wt)) # Add percentile of each 32 possibilities (pc)
+
+# Create marginal table of column sums
+cat_inc <- r %>% group_by(x__income_lev) %>% summarize(wt_pc = sum(pc))
+cat_edu <- r %>% group_by(x__fill__edu_lev) %>% summarize(wt_pc = sum(pc))
+colnames(cat_inc) <- c("cat", "wt_pc")
+colnames(cat_edu) <- c("cat", "wt_pc")
+cat <- full_join(cat_edu, cat_inc)
+
+
+# Merge r and cat manually
+cat <- cat %>% 
+  mutate(
+        x = case_when( # Map centroid x values to income_lev, edu_lev will be 1 
+cat == "Did not graduate high school"               ~ 1,
+cat == "Graduated high school"                      ~ 1,
+cat == "Attended college or technical school"       ~ 1,
+cat == "Graduated from college or technical school" ~ 1,
+cat == "$0 - $10,000"                               ~ r[r$label == "Did not graduate high school\n$0 - $10,000", "x"],
+cat == "$10,000 - $15,000"                          ~ r[r$label == "Did not graduate high school\n$10,000 - $15,000", "x"],
+cat == "$15,000 - $20,000"                          ~ r[r$label == "Did not graduate high school\n$15,000 - $20,000", "x"],
+cat == "$20,000 - $25,000"                          ~ r[r$label == "Did not graduate high school\n$20,000 - $25,000", "x"],
+cat == "$25,000 - $35,000"                          ~ r[r$label == "Did not graduate high school\n$25,000 - $35,000", "x"],
+cat == "$35,000 - $50,000"                          ~ r[r$label == "Did not graduate high school\n$35,000 - $50,000", "x"],
+cat == "$50,000 - $75,000"                          ~ r[r$label == "Did not graduate high school\n$50,000 - $75,000", "x"],
+cat == "$75,000 +"                                  ~ r[r$label == "Did not graduate high school\n$75,000 +", "x"]
+                      ),
+        y = case_when( # Map centroid y values to edu_lev, income_lev will be 1 
+cat == "Did not graduate high school"               ~ r[r$label == "Did not graduate high school\n$75,000 +", "y"],
+cat == "Graduated high school"                      ~ r[r$label == "Graduated high school\n$75,000 +", "y"],
+cat == "Attended college or technical school"       ~ r[r$label == "Attended college or technical school\n$75,000 +", "y"],
+cat == "Graduated from college or technical school" ~ r[r$label == "Graduated from college or technical school\n$75,000 +", "y"],     
+cat == "$0 - $10,000"                               ~ 1,
+cat == "$10,000 - $15,000"                          ~ 1,
+cat == "$15,000 - $20,000"                          ~ 1,
+cat == "$20,000 - $25,000"                          ~ 1,
+cat == "$25,000 - $35,000"                          ~ 1,
+cat == "$35,000 - $50,000"                          ~ 1,
+cat == "$50,000 - $75,000"                          ~ 1,
+cat == "$75,000 +"                                  ~ 1
+                      )
+        )
+cat
+}
+```
+
+
+***************************
+
+
+### Mosaic Plots of Income & Education Levels by Residence Status
+
+```{r own_mosaic, fig.height=8, fig.width=14, out.width = "100%", message=FALSE}
+ds %>% filter(renthom1 == "Own") %>% ggplot() +
+  geom_mosaic(aes(x=product(edu_lev, income_lev), fill = edu_lev)) +
+  ggtitle("Own") + 
+  xlab("Income Level") +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme(axis.text.x = element_text(color = "white", size = 15, angle = 65, vjust = 0.65, hjust=0.5, 
+                                   face = "bold", family = "bebas neue"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text(size = 22, hjust = 0.43, family = "bebas neue"),
+        legend.position = "left",
+        legend.justification = c(-1, 0.25),
+        legend.key.height = unit(95, "points"),
+        legend.text = element_text(size = 12, face = "bold", family = "raleway"),
+        legend.title = element_text(face = "bold", size = 20, hjust = 0.5, family = "bebas neue"),
+        plot.title.position = "plot",
+        plot.title = element_text(hjust = 0.5, size = 28, face = "bold", family = "bebas neue"),
+        axis.title = element_text(face = "bold", size = 18),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank()) +
+  guides(fill = guide_legend(title="Education\nLevel", reverse=TRUE),
+         colour = guide_legend(nrow = 2)) +
+  geom_text(data = gg_own, # Individual percentiles
+            aes(x = (xmin+xmax)/2, y = (ymin+ymax)/2, # min+max/2 gives the center location to the mapping
+                label = paste0(round(pc, 4)*100,"%")), # Multiply % by 100, round, and add % symbol
+            fontface = "bold",
+            family = "raleway") + 
+  geom_label(data = geom_text_margin("Own"), # Marginal probabilities
+             aes(x = x, y = y, 
+                 label = paste0(round(wt_pc*100, 1),"%")), 
+             fontface="bold.italic",
+             family = "raleway")
+```
+
+<blockquote>
+* Home owner's income levels are highly left skewed with the top half of income levels comprising over 77% of responses for home owners. Notice how wide the vertical bars on the right side of the chart are.
+
+* Home owner's education levels are also highly left skewed with over 67% of respondents reporting education in the top half of the four education levels. Note the higher presence of purple and blue in the chart compared to green (27%) and red (5.7%). 
+</blockquote>
+
+************************
+
+
+```{r rent_mosaic, fig.height=8, fig.width=14, out.width = "100%", message=FALSE}
+ds %>% filter(renthom1 == "Rent") %>% ggplot() +
+  geom_mosaic(aes(x=product(edu_lev, income_lev), fill = edu_lev)) +
+  ggtitle("Rent") + 
+  ylab("Education Level") +
+  xlab("Income Level") +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 10)) +
+    theme(axis.text.x = element_text(color = "white", size = 15, angle = 65, vjust = 0.65, hjust=0.5, 
+                                   face = "bold", family = "bebas neue"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text(size = 22, hjust = 0.43, family = "bebas neue"),
+        legend.position = "left",
+        legend.justification = c(-1, 0.25),
+        legend.key.height = unit(95, "points"),
+        legend.text = element_text(size = 12, face = "bold", family = "raleway"),
+        legend.title = element_text(face = "bold", size = 20, hjust = 0.5, family = "bebas neue"),
+        plot.title.position = "plot",
+        plot.title = element_text(hjust = 0.5, size = 28, face = "bold", family = "bebas neue"),
+        axis.title = element_text(face = "bold", size = 18),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank()) +
+  guides(fill = guide_legend(title="Education\nLevel", reverse=TRUE),
+         colour = guide_legend(nrow = 2)) +
+  geom_text(data = gg_rent, # Individual percentiles
+            aes(x = (xmin+xmax)/2, y = (ymin+ymax)/2, # min+max/2 gives the center location to the mapping
+                label = paste0(round(pc, 4)*100,"%")), # Multiply % by 100, round, and add % symbol
+            fontface = "bold",
+            family = "raleway") + 
+  geom_label(data = geom_text_margin("Rent"), # Marginal probabilities
+             aes(x = x, y = y, 
+                 label = paste0(round(wt_pc*100, 1),"%")), 
+             fontface="bold.italic",
+             family = "raleway")
+```
+
+<blockquote>
+* Rental respondents report having a much more unimodal distribution in income levels with a tight range of 9.9%-14.4%. However the lower bound of the distribution range does fall on the highest income levels, and the upper bound falls on the lower end of income levels. This indicates that while this distribution appears unimodal, it is skewed in the opposite direction from the home owner's income levels.
+
+* Renters education levels follow a similar distribution as the home owners however the entire distribution shifts downward with the top education level shrinking by nearly half (40% to 26%), and the lowest education level more than doubling (5.7% to 13.7%).
+</blockquote>
+
+****************************
+
+
+```{r other_mosaic, fig.height=8, fig.width=14, out.width = "100%", message=FALSE}
+ds %>% filter(renthom1 == "Other arrangement") %>% ggplot() +
+  geom_mosaic(aes(x=product(edu_lev, income_lev), fill = edu_lev)) +
+  ggtitle("Other Arrangement") + 
+  ylab("Education Level") +
+  xlab("Income Level") +
+  scale_fill_discrete(labels = function(x) str_wrap(x, width = 10)) +
+  theme(axis.text.x = element_text(color = "white", size = 15, angle = 65, vjust = 0.65, hjust=0.5, 
+                                   face = "bold", family = "bebas neue"),
+        axis.text.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.title.x = element_text(size = 22, hjust = 0.43, family = "bebas neue"),
+        legend.position = "left",
+        legend.justification = c(-1, 0.25),
+        legend.key.height = unit(95, "points"),
+        legend.text = element_text(size = 12, face = "bold", family = "raleway"),
+        legend.title = element_text(face = "bold", size = 20, hjust = 0.5, family = "bebas neue"),
+        plot.title.position = "plot",
+        plot.title = element_text(hjust = 0.5, size = 28, face = "bold", family = "bebas neue"),
+        axis.title = element_text(face = "bold", size = 18),
+        panel.grid.major = element_blank(), 
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank()) +
+  guides(fill = guide_legend(title="Education\nLevel", reverse=TRUE),
+         colour = guide_legend(nrow = 2)) +
+  geom_text(data = gg_other, # Individual percentiles
+            aes(x = (xmin+xmax)/2, y = (ymin+ymax)/2, # min+max/2 gives the center location to the mapping
+                label = paste0(round(pc, 4)*100,"%")), # Multiply % by 100, round, and add % symbol
+            fontface = "bold",
+            family = "raleway") + 
+  geom_label(data = geom_text_margin("Other arrangement"), # Marginal probabilities
+             aes(x = x, y = y, 
+                 label = paste0(round(wt_pc*100, 1),"%")), 
+             fontface="bold.italic",
+             family = "raleway")
+```
+
+<blockquote>
+* "Other arrangement" respondents income level has a similar distribution to the renters but with a quite larger uptick (Δ4.6%) in the lowest income level. 
+
+* "Other arrangement" education levels follow a similar distribution as the renters with the entire distribution shifting downward from the top where the home owner's was and with the top education level shrinking by nearly half (40% to 22%), and the lowest education level more than doubling (5.7% to 13.8%).
+</blockquote>
+
+***************************
+
+
+### Probabilities of Owning/Renting/Other given Income & Education Levels
+
+* The probabilities calculated in the script below are as follows:
+  + P(A) - Home Residence Status: Own, Rent, or Othe Arrangement
+  + P(B|A) - Income Level: ($0-$10,000, $10,000-$15,000, $15,000-$20,000, $20,000-$25,000, $25,000-$35,000, $35,000-$50,000 $50,000-$75,000, $75,000 +), given Home Residence Status.
+  + P(C|A&B) - Education Level: (Did not graduate high school, Graduated high school, Attended college or technical school, Graduated from college or technical school), given Home Residence Status and Income Level.
+  + P(A|B&C) - Probability of Home Residence Status given Income Level and Education Level.
+
+```{r}
+options(digits = 4)
+
+# P(A) - Marginal Probability of Home Residence Status (Home, Rent, and Other) ---
+p_A <- ds %>% group_by(renthom1) %>% summarise(n = n(), p = n/nrow(.))
+
+# P Own
+p_A1 <- filter(p_A, renthom1 == "Own") %>% select(p)
+
+# P Rent
+p_A2 <- filter(p_A, renthom1 == "Rent") %>% select(p)
+
+# P Other arrangement
+p_A3 <- filter(p_A, renthom1 == "Other arrangement") %>% select(p)
+# -------------------------------------
+
+
+
+# P(B|A) - Conditional Probability of B (income level), given A (home residence status) ---
+# Income | Own
+p_B1 <- ds %>% filter(renthom1 == "Own") %>% group_by(income_lev) %>% summarise(n = n(), p = n/nrow(.))
+
+# Income |  Rent
+p_B2 <- ds %>% filter(renthom1 == "Rent") %>% group_by(income_lev) %>% summarise(n = n(), p = n/nrow(.))
+
+# Income |  Other
+p_B3 <- ds %>% filter(renthom1 == "Other arrangement") %>% group_by(income_lev) %>% summarise(n = n(), p = n/nrow(.))
+# -------------------------------------
+
+
+
+# P(C|A&B) - Conditional Probability of C (education level), given A (home residence status) & B (income level) --- 
+
+p_C1 <- { own_edu_inc <- list() # Preallocate list to record each iteration
+
+  for(i in seq_along(unique(ds$income_lev))){ # Filters to residence status and iterates through income levels
+  own_edu_inc[[i]] <- ds %>% filter(renthom1 == "Own" & income_lev == levels(ds$income_lev)[i]) %>% 
+    group_by(edu_lev) %>% summarise(n = n(), p = n/nrow(.)) } # Group by edu_lev to get weights among each income level
+
+own_edu_inc <- setNames(own_edu_inc, levels(ds$income_lev)) # Rename list elements to match income levels 
+own_edu_inc <- bind_rows(own_edu_inc, .id = "income") # Bind list elements into a data frame with income level names (.id)
+}
+
+
+p_C2 <- { rent_edu_inc <- list()
+
+for(i in seq_along(unique(ds$income_lev))){
+  rent_edu_inc[[i]] <- ds %>% filter(renthom1 == "Rent" & income_lev == levels(ds$income_lev)[i]) %>% 
+    group_by(edu_lev) %>% summarise(n = n(), p = n/nrow(.)) }
+
+rent_edu_inc <- setNames(rent_edu_inc, levels(ds$income_lev))
+rent_edu_inc <- bind_rows(rent_edu_inc, .id = "income")
+}
+
+
+p_C3 <- { other_edu_inc <- list()
+
+for(i in seq_along(unique(ds$income_lev))){
+  other_edu_inc[[i]] <- ds %>% filter(renthom1 == "Other arrangement" & income_lev == levels(ds$income_lev)[i]) %>% 
+    group_by(edu_lev) %>% summarise(n = n(), p = n/nrow(.)) }
+
+other_edu_inc <- setNames(other_edu_inc, levels(ds$income_lev))
+other_edu_inc <- bind_rows(other_edu_inc, .id = "income")
+}
+
+# -------------------------------------
+
+
+
+# Joint Probabilities of A∩B∩C  ---
+
+own_proababilities <- p_C1 %>%  # Add p_B values
+  left_join(p_B1 %>% select(1,3), by = c("income" = "income_lev"), suffix = c("C", "B")) %>% 
+  mutate(pA = p_A[1,3]) %>% unnest(pA) %>% rename(pA = p) %>% # Add p_A values
+  mutate(joint = pC*pB*pA)  # Create joint probabilities
+  
+
+rent_proababilities <- p_C2 %>%  # Add p_B values
+  left_join(p_B2 %>% select(1,3), by = c("income" = "income_lev"), suffix = c("C", "B")) %>% 
+  mutate(pA = p_A[2,3]) %>% unnest(pA) %>% rename(pA = p) %>% # Add p_A values
+  mutate(joint = pC*pB*pA) # Create joint probabilities
+
+other_proababilities <- p_C3 %>%  # Add p_B values
+  left_join(p_B3 %>% select(1,3), by = c("income" = "income_lev"), suffix = c("C", "B")) %>% 
+  mutate(pA = p_A[3,3]) %>% unnest(pA) %>% rename(pA = p) %>% # Add p_A values
+  mutate(joint = pC*pB*pA) # Create joint probabilities
+
+# -----------------------------------------
+
+
+
+# P(A|B∩C) using loops with Bayes Theorem ---
+
+own_proababilities$A_given_BandC <- 1:nrow(own_proababilities)
+for(i in 1:nrow(own_proababilities)){
+  own_proababilities$A_given_BandC[i] <- own_proababilities[i, "joint"] /
+                 (own_proababilities[i,"joint"] + rent_proababilities[i,"joint"] + other_proababilities[i, "joint"])
+}
+own_proababilities <- own_proababilities %>% unnest(A_given_BandC)
+
+
+rent_proababilities$A_given_BandC <- 1:nrow(rent_proababilities)
+for(i in 1:nrow(rent_proababilities)){
+  rent_proababilities$A_given_BandC[i] <- rent_proababilities[i, "joint"] /
+                 (own_proababilities[i,"joint"] + rent_proababilities[i,"joint"] + other_proababilities[i, "joint"])
+}
+rent_proababilities <- rent_proababilities %>% unnest(A_given_BandC)
+
+
+other_proababilities$A_given_BandC <- 1:nrow(other_proababilities)
+for(i in 1:nrow(other_proababilities)){
+  other_proababilities$A_given_BandC[i] <- other_proababilities[i, "joint"] /
+    (own_proababilities[i,"joint"] + rent_proababilities[i,"joint"] + other_proababilities[i, "joint"])
+}
+other_proababilities <- other_proababilities %>% unnest(A_given_BandC)
+
+
+# -------------------------------------------
+
+```
+
+
+***Math Help Sources:***
+
+> * https://stats.stackexchange.com/questions/258379/why-is-pa-bc-pbc-pab-c
+  * https://stats.stackexchange.com/questions/318674/what-is-pa-b-c-when-b-c-are-both-independent
+  * https://stats.stackexchange.com/questions/288260/what-does-pabpac-simplify-to
+  * https://ctools.ece.utah.edu/Probability/ConditionalProb/DiscreteRandVars/ProbCondDiscreteEx4.pdf
+
+
+***************
+
+
+### Plotting the Probabilities of Home Residence Status
+
+```{r own_probabilitiesfig.width=8, out.width = "100%", message=FALSE}
+own_proababilities %>% ggplot(aes(x = income, y = A_given_BandC, color = edu_lev, group = edu_lev)) +
+  geom_line() + 
+  geom_point() + 
+  guides(color = guide_legend(reverse=TRUE)) +
+  scale_color_discrete("Education Level") +
+  ylab("P(A|B&C)") +
+  xlab("Income Level") +
+  ggtitle(expression(atop(
+    paste("Probability of ", underline("Ownership"), " Status Given Income & Education Level")))) +
+  theme(axis.text.x = element_text(angle = 90),
+        axis.text = element_text(family = "raleway"),
+        axis.title = element_text(family = "bebas neue", size = 14),
+        plot.title = element_text(family = "bebas neue", hjust = 0.5),
+        legend.title = element_text(family = "bebas neue"),
+        legend.text = element_text(family = "raleway"),
+        legend.key.height = unit(30, "points"),
+        panel.grid.minor = element_blank()) +
+  scale_y_continuous(n.breaks = 15) +
+  scale_color_discrete(name = "Education Level", 
+                       labels = function(x) str_wrap(levels(ds$edu_lev), width = 20))
+```
+
+<blockquote>
+* According to these probabilities, owning a home is roughly 5% - 10% more likely for every level that is increased along the income scale with the lowest income class averaging a 35% chance of owning a home and the highest income class averaging an 85% chance of owning a home.
+
+* Education levels are fairly grouped together among all 4. The high school graduate rate is surprisingly higher than college attendees and college graduates throughout most of the plot which would indicate that graduating high school is the most meaningful way to increase the probabilities of owning a home. The spread between college attendees and college graduates is also very minimal which would indicate that college graduation does not meaningfully impact the chances of owning a home more than a college attendee's.
+</blockquote>
+
+
+********************
+
+
+```{r rent_probabilities, fig.width=8, out.width = "100%", message=FALSE}
+rent_proababilities %>% ggplot(aes(x = income, y = A_given_BandC, color = edu_lev, group = edu_lev)) +
+  geom_line() + 
+  geom_point() + 
+  guides(color = guide_legend(reverse=TRUE)) +
+  scale_color_discrete("Education Level") +
+  ylab("P(A|B&C)") +
+  xlab("Income Level") +
+  ggtitle(expression(atop(
+    paste("Probability of ", underline("Renter"), " Status Given Income & Education Level")))) +
+  theme(axis.text.x = element_text(angle = 90),
+        axis.text = element_text(family = "raleway"),
+        axis.title = element_text(family = "bebas neue", size = 14),
+        plot.title = element_text(family = "bebas neue", hjust = 0.5),
+        legend.title = element_text(family = "bebas neue"),
+        legend.text = element_text(family = "raleway"),
+        legend.key.height = unit(30, "points"),
+        panel.grid.minor = element_blank()) +
+  scale_y_continuous(n.breaks = 15) +
+  scale_color_discrete(name = "Education Level", 
+                       labels = function(x) str_wrap(levels(ds$edu_lev), width = 20))
+```
+
+<blockquote>
+* The probability of being a renter rapidly decreases as respondents move further up the income scale. Respondents in the bottom of the income range are nearly 5 times more likely to be a renter than those in the highest income class.
+
+* Education levels are again fairly grouped together with the highest spread being among high school graduated and high school drop outs. This indicates again that high school graduation rapidly decreases the decreases the chances of being a renter despite income class. College attendees and college graduates are nearly identical again suggesting little to no decrease in probability between the two among income levels.
+</blockquote>
+
+
+********************
+
+
+```{r other_probabilities, fig.width=8, out.width = "100%", message=FALSE}
+other_proababilities %>% ggplot(aes(x = income, y = A_given_BandC, color = edu_lev, group = edu_lev)) +
+  geom_line() + 
+  geom_point() + 
+  guides(color = guide_legend(reverse=TRUE)) +
+  scale_color_discrete("Education Level") +
+  ylab("P(A|B&C)") +
+  xlab("Income Level") +
+  ggtitle(expression(atop(
+    paste("Probability of ", underline("Other Arrangement"), " Status Given Income & Education Level"))))  +
+  theme(axis.text.x = element_text(angle = 90),
+        axis.text = element_text(family = "raleway"),
+        axis.title = element_text(family = "bebas neue", size = 14),
+        plot.title = element_text(family = "bebas neue", hjust = 0.5),
+        legend.title = element_text(family = "bebas neue"),
+        legend.text = element_text(family = "raleway"),
+        legend.key.height = unit(30, "points"),
+        panel.grid.minor = element_blank()) +
+  scale_y_continuous(n.breaks = 15) +
+  scale_color_discrete(name = "Education Level", 
+                       labels = function(x) str_wrap(levels(ds$edu_lev), width = 20))
+```
+
+<blockquote>
+* Remembering that the "other arrangement" response is an ambiguous class of home residence status and considering this response was less than 5% this analysis will not hold as much weight at the prior two but we must still interpret the results.
+
+* The highest of probabilities in this group come from the bottom income class and then decreases exponentially by roughly 40% to the second tier income group. From the second tier to the top tier of income the decline in more linear suggesting the biggest contributor to lower the probability of "other arrangement" is getting out of the lowest income level.
+
+* Education levels are again fairly grouped together with the spread mostly appearing to widen only near the top two ends of the income range. This indicates that education is far less meaningful in decreasing the probability of "other arrangement" than in the prior two analyses. Again we also see that not graduating high school is the most meaningful increase in probability among income levels.
+</blockquote>
+
+
+************
+
+
+## Research Question 2
+
+**How do US State property values affect home ownership and renter rates?**
+
+
+### EDA
+
+#### Additional Data
+
+In addition to the `renthom1` responses and `X_state` in the `BRFSS2013` data, we will need to bring in an additional data set.
+
+`zhvi_df` - The [Zillow Home Value Index](https://www.zillow.com/research/zhvi-methodology) will be used to retrieve the average property value for each month of 2013 from all 50 states.
+
+
+
+#### 4 Variables
+
+`renthom1`: Home owners, renters, and other arrangement
+
+`X_state`: All 50 US States
+
+`pc`: Percentage of `renthom1` for each state
+
+`value`: Average 2013 property value for each state
+
+
+#### Data Wrangling
+
+Import data.
+
+```{r, message=FALSE, warning=FALSE}
+# 2013 ZHVI pulled from fredr package, csv uploaded to avoid API key requirement
+zhvi_df <- read_csv("https://docs.google.com/spreadsheets/d/e/2PACX-1vQdLUASpAAazGWjC0qN9lP0M5v9mNguGK9JW-TPR6KQ7v40w8nXhxnCrwpBNM7bSXfjEkVXcWOOl98g/pub?output=csv")
+
+zhvi_df %>% head()
+```
+
+
+```{r, message=FALSE, warning=FALSE}
+# Create list of state abbreviates from state names
+ab <- fips_codes %>% select(state, state_name) %>% unique()
+```
+
+
+
+Calculate the percentage of home owners, renters, and other for each state from `brfss2013` and `join` with `zhvi_df` and `ab` (state abbreviations). 
+
+```{r message=FALSE, warning=FALSE}
+# Percentage of home owners per state
+state_own <- brfss2013 %>% select(X_state, renthom1) %>% group_by(X_state) %>% 
+  count(renthom1) %>% drop_na() %>% 
+  summarize(renthom1, pc = n/sum(n)) %>% 
+  filter(renthom1 == "Own" & !X_state %in% c("District of Columbia", "Puerto Rico", "Guam")) %>% 
+  left_join(ab, by = c("X_state" = "state_name")) %>% 
+  mutate(X_state = state) %>% select(-state) %>% 
+  left_join(zhvi_df, by = c("X_state" = "state"))
+
+# Percentage of renters per state
+state_rent <- brfss2013 %>% select(X_state, renthom1) %>% group_by(X_state) %>% 
+  count(renthom1) %>% drop_na() %>% 
+  summarize(renthom1, pc = n/sum(n)) %>% 
+  filter(renthom1 == "Rent" & !X_state %in% c("District of Columbia", "Puerto Rico", "Guam")) %>% 
+  left_join(ab, by = c("X_state" = "state_name")) %>% 
+  mutate(X_state = state) %>% select(-state) %>% 
+  left_join(zhvi_df, by = c("X_state" = "state"))
+
+
+# Percentage of other arrangement per state
+state_other <- brfss2013 %>% select(X_state, renthom1) %>% group_by(X_state) %>% 
+  count(renthom1) %>% drop_na() %>% 
+  summarize(renthom1, pc = n/sum(n)) %>% 
+  filter(renthom1 == "Other arrangement" & !X_state %in% c("District of Columbia", "Puerto Rico", "Guam")) %>% 
+  left_join(ab, by = c("X_state" = "state_name")) %>% 
+  mutate(X_state = state) %>% select(-state) %>% 
+  left_join(zhvi_df, by = c("X_state" = "state"))
+```
+
+
+*******************
+
+### Plotting the Correlations
+
+```{r state_own, fig.height=4, out.width = "80%", fig.align='center', message=FALSE}
+state_own %>% ggplot(aes(x = value, y = pc)) +
+  geom_point() +
+  geom_smooth(color = "red", method = "lm") +
+  scale_x_continuous(labels = scales::dollar_format(),
+                     breaks = c(100000, 150000, 200000, 250000, 300000, 350000, 400000, 450000, 500000)) +
+  scale_y_continuous(labels = scales::percent_format(),
+                    breaks = c(.55, .6, .65, .7, .75, .8)) +
+  labs(title = "Home Owners per State by Property Value", 
+       subtitle = paste0("Correlation = ", round(cor(state_own$value, state_own$pc), 3))) +
+  xlab("Mean ZHVI State Home Values (2013)") +
+  ylab("Percentage of Home Owners Per State") +
+  theme(panel.grid.minor = element_blank(),
+        plot.title = element_text(face = "bold", size = 18, hjust = 0.5, family = "bebas neue"),
+        plot.subtitle = element_text(face = "italic", hjust = 0.5),
+        axis.title = element_text(face = "bold", size = 12, family = "bebas neue"),
+        axis.text = element_text(face = "bold", size = 10, family = "raleway"),
+        axis.text.x = element_text(margin = margin(t = 8), angle = 25))
+```
+
+<blockquote>
+* According to the amount of home owners in the `brfss2013` survey, there is a far higher concentration of home owners in states that are more affordable. Remembering that the percentage of home owners was calculated from number of respondents for each state implies that the total number of surveys in each state most likely does not effect these results.
+
+* Since mostly home owners were interviewed, the y-axis fully above 50% is not meaningful so we are more concerned with the ***change*** in y values along the property value levels (the slope).
+</blockquote>
+
+
+*******************
+
+
+```{r state_rent, fig.height=4, out.width = "80%", fig.align='center', message=FALSE}
+state_rent %>% ggplot(aes(x = value, y = pc)) +
+  geom_point() +
+  geom_smooth(color = "green", method = "lm")+
+  scale_x_continuous(labels = scales::dollar_format(),
+                     breaks = seq(100000, 500000, by = 50000)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "Renters per State by Property Value", 
+       subtitle = paste0("Correlation = ", round(cor(state_rent$value, state_rent$pc), 3))) +
+  xlab("Mean ZHVI State Home Values (2013)") +
+  ylab("Percentage of Renters Per State") +
+  theme(panel.grid.minor = element_blank(),
+        plot.title = element_text(face = "bold", size = 18, hjust = 0.5, family = "bebas neue"),
+        plot.subtitle = element_text(face = "italic", hjust = 0.5),
+        axis.title = element_text(face = "bold", size = 12, family = "bebas neue"),
+        axis.text = element_text(face = "bold", size = 10, family = "raleway"),
+        axis.text.x = element_text(margin = margin(t = 8), angle = 25))
+```
+
+<blockquote>
+* The x (property) values are still constant so while the dots might appear similar formation, we are still more concerned the degree of ***change*** in the y values along the x-axis. This time that change (slope) is upward (+0.641) reflecting that property values do influence the amount of renters per state. 
+</blockquote>
+
+
+*******************
+
+
+```{r state_other, fig.height=4, out.width = "80%", fig.align='center', message=FALSE}
+state_other %>% ggplot(aes(x = value, y = pc)) +
+  geom_point() +
+  geom_smooth(color = "blue", method = "lm")+
+  scale_x_continuous(labels = scales::dollar_format(),
+                     breaks = seq(100000, 500000, by = 50000)) +
+  scale_y_continuous(labels = scales::percent_format()) +
+  labs(title = "\"Other Arrangement\" per State by Property Value", 
+       subtitle = paste0("Correlation = ", round(cor(state_other$value, state_other$pc), 3))) +
+  xlab("Mean ZHVI State Home Values (2013)") +
+  ylab("Percentage of \"Other Arrangement\" Per State") +
+  theme(panel.grid.minor = element_blank(),
+        plot.title = element_text(face = "bold", size = 18, hjust = 0.5, family = "bebas neue"),
+        plot.subtitle = element_text(face = "italic", hjust = 0.5),
+        axis.title = element_text(face = "bold", size = 12, family = "bebas neue"),
+        axis.text = element_text(face = "bold", size = 10, family = "raleway"),
+        axis.text.x = element_text(margin = margin(t = 8), angle = 25))
+```
+
+<blockquote>
+* Again remembering that the "other arrangement" response is an ambiguous class of home residence status and considering this response was less than 5% this analysis will not hold as much weight at the prior two but we must still interpret the results.
+
+* The misleading nature of the linear regression line here must be noted. If Hawaii (the only point above $400,000) were excluded, this line would show a negative correlation in "other arrangement" responses. 
+</blockquote>
+
+
+********
+
+
+## Research Question 3
+
+**Which states have poor seat belt habits and do they correlate to states with higher vehicle fatalities?**
+
+*Limitations: Total number of adults over 18 per state **(what was calculated)**, is not the same as number of eligible licensed drivers per state **(what could not be obtained)**.*
+
+### EDA
+
+#### Additional Data
+
+In addition to the `seatbelt` responses in the `BRFSS2013` data, we will need to bring in 3 more data sets.
+
+1. `FARS2013` - The [Fatality Analysis Reporting System](https://crashstats.nhtsa.dot.gov/Api/Public/ViewPublication/813254) is a database provided by the National Highway Traffic Safety Administration for data regarding motor vehicle injuries and fatalities. 
+
+2. `US_POPULATION_ESTIMATES` - [Yearly State Population Estimates](https://www2.census.gov/programs-surveys/popest/technical-documentation/methodology/2010-2019/natstcopr-methv2.pdf) provided by the United States Census Bureau.
+
+3. `STATE_AGES` - [Population Distribution by Age](https://www.kff.org/other/state-indicator/distribution-by-age/?currentTimeframe=6&sortModel=%7B%22colId%22:%22Location%22,%22sort%22:%22asc%22%7D) is provided by the Kaiser Family Foundation, a nonprofit organization focusing on national health issues, as well as the U.S. role in global health policy.
+
+
+*********************
+
+#### Variables
+
+`X_state`: 51 States (including District of Columbia)
+
+`seatbelt` (transposed): Responses per state; "Always", "Nearly always", "Sometimes", "Seldom", or "Never".
+
+`always_pc` (calculated): Percentage of "Always" response per state.
+
+`POPESTIMATE2013`: Total population estimate of each state for 2013.
+
+`Children 0-18`: Percentage of children under 18-years-old per state in 2013.
+
+`adults` (calculated): Total estimated number of adults per state in 2013.
+
+`fatals`: Number of motor vehicle fatalities per state in 2013.
+
+`fatals_permil` (calculated): Motor vehicle fatalities per 1 million adults in each state during 2013. 
+
+*******************
+
+#### Data Wrangling
+
+Pull the `seatbelt`variable from `brfss2013` and transpose it to get a count of each response per state.
+```{r}
+seatbelt <- brfss2013 %>% filter(!X_state %in% c("0", "80", "Puerto Rico", "Guam")) %>% 
+  group_by(X_state) %>% count(seatbelt) %>% 
+  filter(!seatbelt %in% c("Never drive or ride in a car", NA)) %>% # Remove non vehicle riders and NA's
+  pivot_wider(names_from = seatbelt, values_from = n) 
+
+seatbelt %>% head()
+```
+
+
+
+Import and prepare the `FARS2013` data set. 
+```{r warning=FALSE, message=FALSE}
+FARS2013 <- read_csv("Data/ACCIDENT.csv")
+
+# Pull STATE & FATALS, group by state and total fatalities per state
+FARS2013 <- FARS2013 %>% select(STATE, FATALS) %>% 
+  group_by(STATE) %>% summarize(fatals = sum(FATALS))
+
+# Pull FIPS code for each state_name
+states <- fips_codes %>% select(state_code, state_name) %>% 
+  mutate(state_code = as.numeric(state_code)) %>%  # Because FARS FIPS were numeric
+  unique()
+
+# Join state_name on FIPS & fatalities, then remove FIPS
+FARS2013 <- FARS2013 %>% left_join(states, by = c("STATE" = "state_code")) %>% select(-STATE) 
+```
+
+
+
+Retrieve `POPESTIMATE2013` from `US_POPULATION_ESTIMATES` for State Population Estimate from 2013.
+```{r message=FALSE, warning=FALSE, results='hide'}
+# Only pull name of state and 2013 estimate
+pop <- read_csv("https://www2.census.gov/programs-surveys/popest/datasets/2010-2019/national/totals/nst-est2019-alldata.csv") %>% 
+  select(NAME, POPESTIMATE2013)
+```
+
+
+Retrieve `Children 0-18` variable from `STATE_AGES` for each state to calculate number of adults.
+```{r message=FALSE, warning=FALSE, results='hide'}
+download.file("https://docs.google.com/spreadsheets/d/e/2PACX-1vSndFprgfW4wYC9WxGgDuFMR1IeKv1cu3dPdaPtjjAYWFqkrE8sdRHf-iuDWVIEOrIn8jg15qwnfTDm/pub?output=csv",
+              destfile = "Data/children.csv")
+
+
+children <- read_csv("Data/children.csv", skip = 3) %>% 
+  select(Location, `Children 0-18`)
+```
+
+
+Joining them all together.
+```{r}
+# Join `FARS2013` with `pop`
+FARS2013 <- FARS2013 %>% left_join(pop, by = c("state_name" = "NAME"))
+
+
+# Join `FARS2013` with `children`, then calculate number of fatalities per 1 million adults
+FARS2013 <- FARS2013 %>% left_join(children, by = c("state_name" = "Location")) %>%
+  mutate(adults = round((1 - `Children 0-18`) * POPESTIMATE2013, 0), # Percentage of adults * total estimate
+         fatals_permil = round(fatals/adults*1000000, 0)) %>% # Number of fatalities per 1 million adults
+  select(-POPESTIMATE2013, -`Children 0-18`) # No longer need estimate or child percentage
+  
+
+# Join `FARS2013` with `seatbelt`, then calculate percentage of "Always" response per state
+FARS2013 <- FARS2013 %>%
+  left_join(seatbelt, by = c("state_name" = "X_state")) %>% 
+  group_by(state_name) %>% 
+  mutate(always_pc = Always/sum(Always, `Nearly always`, Sometimes, Seldom, Never),
+         .before = Always) 
+
+
+# Reorder state_name factor levels in ascending fatalities per million
+levels <- FARS2013 %>% arrange(fatals_permil) %>% ungroup() %>% pull(state_name) %>% as.factor(.)
+
+FARS2013$state_name <- factor(FARS2013$state_name, levels = levels)
+
+FARS2013 <- FARS2013 %>% rename(state = state_name) # plot_usmap() requires variable to be named `state` or `fips`
+
+FARS2013 %>% head()
+```
+
+*********
+
+
+To obtain the centroid locations for all 51 states in this analysis, we will use `usmapdata::centroid_labels()` to plot values on top of a map.
+
+```{r}
+#gg_FARS2013 <- FARS2013 %>% left_join(centroid_labels("states"), by = c("state" = "full")) %>% 
+#  select(-fips, -abbr) # Remove unnecessary columns provided from centroid_labels()
+```
+
+```{r}
+gg_FARS2013 <- FARS2013 %>%
+  left_join(centroid_labels("states"), by = c("state" = "full")) %>%
+  mutate(geom = str_replace_all(geom, pattern = "[c\\(\\)]", replacement = "")) %>% # Remove 'c()' from the strings
+  mutate(geom = str_replace_all(geom, pattern = ",", replacement = " ")) %>% # Replace commas with spaces
+  separate(geom, into = c("x", "y"), sep = "\\s+", convert = TRUE) # Separate into x and y, converting to numeric
+
+
+```
+
+
+***********
+
+
+### Plotting with `usmap` Package
+
+```{r fig.width=8, out.width = "90%", fig.align='center'}
+plot_usmap(data = FARS2013, values = "fatals_permil", color = "black") + 
+  scale_fill_continuous(
+    limits = c(50, 300), 
+    breaks = c(50, 100, 150, 200, 250, 300),
+    low = "white", high = "red", 
+    name = "Motor Vehicle Deaths\nper 1 Million Adults") +
+  ggtitle("Fatalities per Million by U.S. State (2013)") +
+  theme(plot.title = element_text(family = "bebas neue", color = "white", face = "bold", 
+                                  size = 18, hjust = 0.5),
+        legend.text = element_text(family = "raleway", color = "white", face = "bold", size = 10),
+        legend.title = element_text(family = "bebas neue", color = "white", face = "bold", 
+                                    size = 10, hjust = 0.5, vjust = 1),
+        legend.key.height = unit(30, "points"),
+        legend.key.width = unit(25, "points"),
+        legend.justification = "center",
+        legend.position = "right",
+        legend.background = element_blank(),
+        plot.background = element_blank()) +
+  geom_text(aes(x = x, y = y), 
+            color = "black",
+            data = gg_FARS2013, 
+            label = round(FARS2013$fatals_permil, 0),
+            size = 3,
+            family = "raleway")
+
+
+```
+
+<blockquote>
+* The highest concentrated regions for fatalities per million adults by state appear in the north mid west and the south.  
+</blockquote>
+
+
+***********************
+
+
+```{r fig.width=8, out.width = "90%", fig.align='center'}
+plot_usmap(data = FARS2013, values = "always_pc", color = "black") + 
+  scale_fill_continuous(
+    low = "red", high = "white", 
+    name = "Percentage That \n\"Always\" Wear Seat Belts", 
+    label = scales::label_percent()) +
+  ggtitle("Seat Belt Habits Among U.S. States") +
+  theme(plot.title = element_text(family = "bebas neue", color = "white", face = "bold", 
+                                  size = 18, hjust = 0.5),
+        legend.text = element_text(family = "raleway", color = "white", face = "bold", size = 10),
+        legend.title = element_text(family = "bebas neue", color = "white", face = "bold", 
+                                    size = 10, hjust = 0.5, vjust = 1),
+        legend.key.height = unit(30, "points"),
+        legend.key.width = unit(25, "points"),
+        legend.justification = "center",
+        legend.position = "right",
+        legend.background = element_blank(),
+        plot.background = element_blank())  +
+  geom_text(aes(x = x, y = y), 
+            color = "black",
+            data = gg_FARS2013, 
+            label = paste0(round(FARS2013$always_pc*100,0),"%"),
+            size = 3,
+            family = "raleway")
+
+```
+
+<blockquote>
+* The highest concentrated regions for poor seat belt habits by state appear again in the north mid west and New Hampshire.  
+</blockquote>
+
+
+*********************
+
+
+### Plotting Fatalities and Seat Belt Habits
+
+Since the north mid west was the only obvious visual comparison among both maps, plot these points on a scatter plot and use the same linear regression line from prior to get a better visual of how these two variables compare.
+
+```{r fig.height=4, out.width = "80%", fig.align='center', message=FALSE}
+FARS2013 %>% ggplot(aes(x = always_pc, y = fatals_permil)) +
+  geom_point() +
+  stat_smooth(color = "red", method = lm) +
+ # theme_bw() +
+  labs(title = "Better Seat Belt Habits Moderately Correlate to Fewer Vehicle Fatalities", 
+       subtitle = paste0("Correlation = ", round(cor(FARS2013$fatals_permil, FARS2013$always_pc), 3))) +
+  xlab("\"Always\" Wear Seatbelts") +
+  ylab("Fatalities per Million by State") +
+  scale_x_continuous(label = scales::label_percent()) +
+  scale_y_continuous(breaks = c(50, 100, 150, 200, 250, 300)) +
+  theme(plot.title = element_text(family = "bebas neue", size = 15, face = "bold", hjust = 0.5),
+        plot.subtitle = element_text(face = "italic", hjust = 0.5),
+        axis.title = element_text(family = "bebas neue", size = 14, face = "bold"),
+        axis.text = element_text(family = "raleway", color = "white", size = 10, face = "bold"))
+```
+
+
+<blockquote>
+* There is a moderate correlation (-0.37) to fewer vehicle fatalities and better seat belt habits. 
+
+* So wear your seat belts!
+</blockquote>
